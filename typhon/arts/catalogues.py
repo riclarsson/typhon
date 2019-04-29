@@ -27,24 +27,24 @@ __all__ = ['ArrayOfLineRecord',
 
 class GridPos:
     """Representation of ARTS GridPos"""
-    
+
     def __init__(self, ind=None, n1=None, n2=None):
         self.ind = ind  # Index
         self.n1 = n1    # Numeric
         self.n2 = n2    # Numeric
-        
+
     @classmethod
     def from_xml(cls, xmlelement):
         """Loads GridPos object from an existing file.
         """
         obj = cls()
-        
+
         obj.ind = int(xmlelement[0].value())
         obj.n1 = xmlelement[1].value()
         obj.n2 = xmlelement[2].value()
-        
+
         return obj
-    
+
     def write_xml(self, xmlwriter, attr=None):
         """Write GridPos object to an ARTS XML file.
         """
@@ -56,20 +56,20 @@ class GridPos:
         xmlwriter.write_xml(self.n1, {"name": "FractionalDistanceToNextPoint_1"})
         xmlwriter.write_xml(self.n2, {"name": "FractionalDistanceToNextPoint_2"})
         xmlwriter.close_tag()
-    
+
     def __repr__(self):
         return "GridPos {}: n1={}; n2={}".format(self.ind, self.n1, self.n2)
-    
+
     def __eq__(self, other):
         return self.ind == other.ind and self.n1 == other.n1 and self.n2 == other.n2
-    
+
     def __ne__(self, other):
         return not (self==other)
 
 
 class Ppath:
     """Represents the Ppath variable in ARTS"""
-    
+
     def __init__(self):
         self.dim = None          # Index
         self.np = None           # Index
@@ -90,16 +90,16 @@ class Ppath:
         self.gp_p = None         # ArrayOfGridPos
         self.gp_lat = None       # ArrayOfGridPos
         self.gp_lon = None       # ArrayOfGridPos
-    
+
     def __repr__(self):
         return "Ppath of {} steps in {}D Atmosphere".format(self.np, self.dim)
-    
+
     @classmethod
     def from_xml(cls, xmlelement):
         """Loads Ppath object from an existing file.
         """
         obj = cls()
-        
+
         obj.dim = int(xmlelement[0].value())
         obj.np = int(xmlelement[1].value())
         obj.constant = xmlelement[2].value()
@@ -120,7 +120,7 @@ class Ppath:
         obj.gp_lat = xmlelement[17].value()
         obj.gp_lon = xmlelement[18].value()
         return obj
-    
+
     def write_xml(self, xmlwriter, attr=None):
         """Write Ppath object to an ARTS XML file.
         """
@@ -148,15 +148,15 @@ class Ppath:
         xmlwriter.write_xml(self.gp_lat, {"name": "LatitudeGridIndexPosition"}, arraytype="GridPos")
         xmlwriter.write_xml(self.gp_lon, {"name": "LongitudeGridIndexPosition"}, arraytype="GridPos")
         xmlwriter.close_tag()
-        
+
     def alt_lat_lon_za_aa(self):
         alt = self.pos[:, 0]
         lat = self.pos[:, 1] if self.pos.shape[1] > 1 else np.zeros_like(alt)
         lon = self.pos[:, 2] if self.pos.shape[1] > 2 else np.zeros_like(alt)
-        
+
         za = self.los[:, 0]
         aa = self.los[:, 1] if self.los.shape[1] > 1 else np.zeros_like(za)
-        
+
         return alt, lat, lon, za, aa
 
 
@@ -840,12 +840,12 @@ class QuantumNumberRecord:
 
     def __init__(self, upper=None, lower=None):
         self._qns = {'UP': QuantumNumbers(), 'LO': QuantumNumbers()}
-        self._qns['UP'] = return_if_arts_type(upper, 'QuantumNumbers')
-        self._qns['LO'] = return_if_arts_type(lower, 'QuantumNumbers')
+        self._qns['UP'] = QuantumNumbers(upper)
+        self._qns['LO'] = QuantumNumbers(lower)
 
     def __repr__(self):
         if len(self._qns['UP']) == 0 and len(self._qns['LO']) == 0:
-            return 'No Quantum-Numbers'
+            return 'UP LO'
         else:
             return "UP " + str(self._qns['UP']) + " LO " + str(self._qns['LO'])
 
@@ -1018,6 +1018,7 @@ class QuantumNumberRecord:
     def __iadd__(self, qnr):
         self._qns['UP'] += qnr['UP']
         self._qns['LO'] += qnr['LO']
+        return self
 
     def __isub__(self, qnr):
         self._qns['UP'] -= qnr['UP']
@@ -1376,35 +1377,35 @@ class PropagationMatrix:
             raise RuntimeError("Bad input")
 
         self.data = data.reshape(self.aa, self.za, self.nf, data.shape[-1])
-    
+
     def Kjj(self, aa=0, za=0):
         return self.data[aa, za, :, 0]
-    
+
     def K12(self, aa=0, za=0):
         return self.data[aa, za, :, 1]
-    
+
     def K13(self, aa=0, za=0):
         return self.data[aa, za, :, 2]
-    
+
     def K14(self, aa=0, za=0):
         return self.data[aa, za, :, 3]
-    
+
     def K23(self, aa=0, za=0):
         return self.data[aa, za, :, 4]
-    
+
     def K24(self, aa=0, za=0):
         return self.data[aa, za, :, 5]
-    
+
     def K34(self, aa=0, za=0):
         return self.data[aa, za, :, 6]
-    
+
     def __add__(self, other):
         if isinstance(other, PropagationMatrix):
             return PropagationMatrix(self.data + other.data)
         else:
             return PropagationMatrix(self.data + other)
     __radd__ = __add__
-    
+
     def __repr__(self):
         size = "Stokes Dim: {}, Freqs: {}, Zeniths: {}, Azimuths: {}".format(self.stokes, self.nf, self.za, self.aa)
         return "PropagationMatrix of size <{}>".format(size)

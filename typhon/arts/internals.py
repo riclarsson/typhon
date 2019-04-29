@@ -8,7 +8,7 @@ Implementation of classes to handle various ARTS internal structures.
 import typhon.constants as constants
 import typhon.spectroscopy as spectroscopy
 import typhon
-    
+
 import numpy as np
 import scipy.interpolate as _ip
 from scipy.special import wofz as _Faddeeva_
@@ -30,53 +30,53 @@ def read_hitran_online(hitran_file, fmin=0, fmax=1e9999,
                        hit_tmp='HITRAN2012.par', remove_hit_tmp=True,
                        reset_qn=True):
     """ Reads catalog from HITRAN online
-    
+
     This function is meant for specific input, so failure is an option.  This
     code might also break in the future should HITRAN update their format again
-    
+
     The format has to be [.par line, qns', qns''] in that order
-    
+
     There is a temporary file generated.  This must be named so that the ARTS
     function abs_linesReadFromHitran can read the file.  After the temporary
     file has been read by ARTS, the catalog is accessed for each line to set
-    their quantum numbers of qns' and qns''.  Note that these are added as 
+    their quantum numbers of qns' and qns''.  Note that these are added as
     additions to existing numbers.  Caveats follow.
-    
+
     The following qunatum numbers are ignored at present:
         kronigParity
-        
+
         ElecStateLabel
-        
+
     The following are reinterpreted for ARTS:
         v to v1
-        
+
         nuclearSpinRef to F
-        
+
     The following are given values despite having none:
         parity=- is set as -1
-        
+
         parity=+ is set as +1
-        
+
     All other variables are written to verbatim.  This means that if ARTS does
     not have the quantum number keys prescribed, the catalog that is produced
     will not be possible to read with ARTS.  Take care!
-    
+
     Input:
         hitran_file:
             a file generated from hitran.org
-        
+
         fmin:
             fmin in abs_linesReadFromHitran
-        
+
         fmax:
             fmax in abs_linesReadFromHitran
-        
+
         hit_tmp:
             temporary filename for abs_linesReadFromHitran
-        
+
         remove_hit_tmp:
             Flag to remove or not the file hit_tmp using os.remove
-    
+
     Output:
         ARTSCAT5 catalog of lines
     """
@@ -163,7 +163,7 @@ class LineFunctionsData:
         self.LM = None
         self.species = None
         self.data = None
-        
+
     @staticmethod
     def len_of_key(key):
         if key in ["LM_AER"]:
@@ -176,7 +176,7 @@ class LineFunctionsData:
             return 2
         elif key in ["T2", "T4"]:
             return 3
-    
+
     def fill_data(self, array, ndata, start=0):
         pos = 1*start
         i = 0
@@ -200,7 +200,7 @@ class LineFunctionsData:
         self.species = int(array[i+2])
         j = i + 3
         return self.fill_data(array, self.set_data_shape(), j)
-    
+
     def len_of_data(self):
         if self.LS in ['DP']:
             shape_len = 0
@@ -221,10 +221,10 @@ class LineFunctionsData:
         else:
             raise RuntimeError(f'Unknown LM value: {self.LM}')
         return mixing_len + shape_len
-        
+
     def set_data_shape(self):
         ndata = self.len_of_data()
-        
+
         self.data = {}
         i = 0
         while i < self.species:
@@ -235,7 +235,7 @@ class LineFunctionsData:
                 j += 1
             i += 1
         return ndata
-    
+
     def __repr__(self):
         ndata = self.len_of_data()
         st = ''
@@ -291,6 +291,10 @@ class ARTSCAT5:
     _ze_ind = 12
     _lf_ind = 13
     _lsm_ind = 14
+
+    _accepted_keys = ['freq', 'afgl', 'str', 'glow', 'gupp', 'elow',
+                      'spec', 'ein', 't0', 'QN', 'PB', 'LM', 'LSM',
+                      'ZE', 'LF']
 
     def __init__(self, init_data=None):
         self._dictionaries = np.array([], dtype=dict)
@@ -474,6 +478,34 @@ class ARTSCAT5:
         for line in artscat5:
             self._append_line_(line)
 
+    def _append_dict(self, dict):
+        for key in dict:
+            if key not in self._accepted_keys:
+                raise RuntimeError("Bad input key: " + str(key))
+
+        LineRecordData = {'freq' : dict.get('freq', np.nan),
+                          'afgl' : dict.get('afgl', np.nan),
+                          'str'  : dict.get('str',  np.nan),
+                          'glow' : dict.get('glow', np.nan),
+                          'gupp' : dict.get('gupp', np.nan),
+                          'elow' : dict.get('elow', np.nan),
+                          'spec' : dict.get('spec', np.nan),
+                          'ein'  : dict.get('ein',  np.nan),
+                          't0'   : dict.get('t0',   np.nan),}
+        _dictionaries = {"QN":  dict.get('QN', QuantumNumberRecord()),
+                         "PB":  dict.get('PB', PressureBroadening({"Type": None,
+                                                                   "Data": np.array([])})),
+                         "LM":  dict.get('LM', LineMixing({"Type": None,
+                                                           "Data": np.array([])})),
+                         "LF":  dict.get('LF', LineFunctionsData()),
+                         "ZE":  dict.get('ZE', {"POL": None}),
+                         "LSM": dict.get('LSM', {})}
+
+        for i in LineRecordData:
+            self.LineRecordData[i] = np.append(self.LineRecordData[i], LineRecordData[i])
+        self._dictionaries = np.append(self._dictionaries, _dictionaries)
+        self._n+=1
+
     def set_testline(self, i_know_what_i_am_doing=False):
         assert(i_know_what_i_am_doing)
         self._n = 1
@@ -516,6 +548,8 @@ class ARTSCAT5:
         elif type(other) in [list, np.ndarray]:
             for x in other:
                 self.append(x)
+        elif type(other) is dict:
+            self._append_dict(other)
         else:
             assert False, "Unknown type"
         self._assert_sanity_()
@@ -733,6 +767,11 @@ class ARTSCAT5:
         """Return quantum number entries for line at index
         """
         return self._dictionaries[index]['QN']
+
+    def set_quantumnumbers(self, index, qns):
+        """Return quantum number entries for line at index
+        """
+        self._dictionaries[index]['QN'] = qns
 
     def linemixing(self, index):
         """Return line mixing entries for line at index
